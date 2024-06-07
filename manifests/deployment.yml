@@ -1,0 +1,19 @@
+apiVersion : apps/v1
+kind: Deployment
+metadata:
+  name: ecommerceadmin 
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ecommerceadmin
+  template:
+    metadata:
+      labels:
+        app: ecommerceadmin 
+    spec:
+      containers:
+        - name: ecommerceadmin 
+          image: containerregistrygrupo1.azurecr.io/ecommerceadmin
+          ports:
+          - containerPort: 3000
