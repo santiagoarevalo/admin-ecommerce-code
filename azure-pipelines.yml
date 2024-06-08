@@ -1,0 +1,70 @@
+# Deploy to Azure Kubernetes Service
+# Build and push image to Azure Container Registry; Deploy to Azure Kubernetes Service
+# https://docs.microsoft.com/azure/devops/pipelines/languages/docker
+
+trigger:
+- master
+
+resources:
+- repo: self
+
+variables:
+
+  # Container registry service connection established during pipeline creation
+  dockerRegistryServiceConnection: '405f4175-fd55-473b-b531-1a2594453ad3'
+  imageRepository: 'ecommerceadmin'
+  containerRegistry: 'containerregistrygrupo1.azurecr.io'
+  dockerfilePath: '**/Dockerfile'
+  tag: '$(Build.BuildId)'
+  imagePullSecret: 'containerregistrygrupo1112036da-auth'
+
+stages:
+- stage: Build
+  displayName: Build stage
+  jobs:
+  - job: Build
+    displayName: Build
+    pool:
+      name: linux-pool  # Nombre del agente creado para el pipeline
+    steps:
+    - task: Docker@2
+      displayName: Build and push an image to container registry
+      inputs:
+        command: buildAndPush
+        repository: $(imageRepository)
+        dockerfile: $(dockerfilePath)
+        containerRegistry: $(dockerRegistryServiceConnection)
+        tags: |
+          $(tag)
+
+    - upload: manifests
+      artifact: manifests
+
+- stage: Deploy
+  displayName: Deploy stage
+  dependsOn: Build
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+
+  jobs:
+  - job: Deploy
+    displayName: Deploy
+    pool:
+      name: linux-pool  # Cambiar al nombre correcto de tu pool de Windows
+    steps:
+
+    - powershell: |
+        Write-Host "Cloning repository"
+        git clone https://github.com/Samuelguerrero1184/ecommerce-devops-iac.git
+        Set-Location ecommerce-devops-iac/Kubernetes
+        (Get-Content deployment.yaml) -replace 'image: containerRegistryGrupo1.azurecr.io\/images\/ecommerce-admin:.*', 'image: containerregistrygrupo1.azurecr.io\/ecommerceadmin:$(tag)' | Set-Content deployment.yaml
+      displayName: Clone repository and update YAML
+
+    - task: AzureCLI@2
+      inputs:
+        azureSubscription: 'azure-students'
+        scriptType: 'ps'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          az aks get-credentials --resource-group ecommerceResourceGroup1 --name ecommerceCluster
+          kubectl apply -f ecommerce-devops-iac/Kubernetes/deployment.yaml
+      displayName: Deploy to AKS
